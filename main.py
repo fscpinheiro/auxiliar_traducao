@@ -9,75 +9,66 @@ import threading
 class Application(tk.Tk):
     def __init__(self):
         super().__init__()
-
         self.title("Ajudante de Tradução")
         self.base_file_path = None
         self.trans_file_paths = []
         self.columns = ['ID', 'Chave', 'Valor']
         self.analysis_results_tree = None
-
         # Frame para seleção de arquivos base
         self.base_file_frame = tk.Frame(self)
         self.base_file_frame.pack(fill='x')
-
         self.base_file_button = tk.Button(self.base_file_frame, text="Escolher arquivo", command=self.select_base_file)
         self.base_file_button.pack(side='left')
         self.base_file_clear_button = tk.Button(self.base_file_frame, text="Limpar seleção",
                                                 command=self.clear_base_file)
         self.base_file_clear_button.pack(side='left')
-
         self.base_file_label = tk.Label(self.base_file_frame, text="Arquivo base:", bg="black", fg="white",
                                         font=("Arial", 12, "bold"))
         self.base_file_label.pack(side='left', fill='x', expand=True)
-
         # Frame para seleção de arquivos de tradução
         self.trans_file_frame = tk.Frame(self)
         self.trans_file_frame.pack(fill='x')
-
         self.trans_file_button = tk.Button(self.trans_file_frame, text="Escolher arquivos",
                                            command=self.select_trans_files)
         self.trans_file_button.pack(side='left')
         self.trans_file_clear_button = tk.Button(self.trans_file_frame, text="Limpar seleção",
                                                  command=self.clear_trans_files)
         self.trans_file_clear_button.pack(side='left')
-
         self.trans_file_label = tk.Label(self.trans_file_frame, text="Arquivos de tradução:", bg="black", fg="white",
                                          font=("Arial", 12, "bold"))
         self.trans_file_label.pack(side='left', fill='x', expand=True)
-
         # Frame para opções de análise
         self.options_frame = tk.Frame(self)
         self.options_frame.pack(fill='x')
-
         # Checkboxes para opções de análise
         self.show_only_divergent = tk.BooleanVar()
         self.show_only_divergent_check = tk.Checkbutton(self.options_frame, text="Mostrar apenas chaves divergentes",
                                                         variable=self.show_only_divergent)
         self.show_only_divergent_check.pack(side='left')
-
         self.show_indirect_keys = tk.BooleanVar()
         self.show_indirect_keys_check = tk.Checkbutton(self.options_frame, text="Mostrar chaves Indiretas",
                                                        variable=self.show_indirect_keys)
         self.show_indirect_keys_check.pack(side='left')
-
         # Botão de análise
         self.analyze_button = tk.Button(self.options_frame, text="Analisar", command=self.analyze_files)
         self.analyze_button.pack(side='left')
-
         # Abas de relatório
         self.tab_control = ttk.Notebook(self)
         self.tab_control.pack(expand=1, fill='both')
-
         self.analysis_results_tab = ttk.Frame(self.tab_control)
         self.tab_control.add(self.analysis_results_tab, text='Resultado da Análise')
-
         # Aba de visualização
         self.files_tab = ttk.Frame(self.tab_control)
         self.tab_control.add(self.files_tab, text='Arquivos')
-
         self.view_notebook = ttk.Notebook(self.files_tab)
         self.view_notebook.pack(expand=1, fill='both')
-
+        # Cria o menu de contexto
+        self.context_menu = tk.Menu(self, tearoff=0)
+        self.context_menu.add_command(label="Copiar", command=self.copy_to_clipboard)
+        self.context_menu.add_command(label="Traduzir para inglês", command=self.translate_to_english)
+        self.context_menu.add_command(label="Traduzir para espanhol", command=self.translate_to_spanish)
+        # Vincula o evento de clique com o botão direito do mouse ao menu de contexto
+        self.bind("<Button-3>", self.show_context_menu)
         # Maximizar a janela
         self.state('zoomed')
 
@@ -205,7 +196,7 @@ class Application(tk.Tk):
 
         tree_scrollbar_y.config(command=self.analysis_results_tree.yview)
         tree_scrollbar_x.config(command=self.analysis_results_tree.xview)
-        self.analysis_results_tree.bind("<Button-3>", self.show_context_menu)
+        #self.analysis_results_tree.bind("<Button-3>", self.show_context_menu)
 
         # Configura as colunas
         self.analysis_results_tree.column('ID', width=110, anchor='center')
@@ -268,7 +259,7 @@ class Application(tk.Tk):
         add_key_button = tk.Button(self.analysis_results_tab, text="Adicionar chave faltante",
                                    command=self.add_missing_key)
         add_key_button.pack()
-        self.analysis_results_tree.bind('<Button-3>', self.copy_to_clipboard)
+        #self.analysis_results_tree.bind('<Button-3>', self.copy_to_clipboard)
 
     def analyze(self):
         self.analyze_files(only_missing=False)
@@ -319,9 +310,20 @@ class Application(tk.Tk):
         self.context_menu.add_command(label="Traduzir para espanhol", command=self.translate_to_spanish)
 
     def show_context_menu(self, event):
-        # Obtém a linha e coluna selecionada
-        self.selected_row = self.analysis_results_tree.identify_row(event.y)
-        self.selected_col = self.analysis_results_tree.identify_column(event.x)
+        # Identifica a linha sob o cursor
+        row_id = self.analysis_results_tree.identify_row(event.y)
+        column_id = self.analysis_results_tree.identify_column(event.x)
+
+        # Se nenhuma linha foi identificada, não faz nada
+        if row_id == "":
+            return
+
+        # Seleciona a linha sob o cursor
+        self.analysis_results_tree.selection_set(row_id)
+
+        # Armazena a linha e coluna selecionada
+        self.selected_row = row_id
+        self.selected_col = column_id
 
         # Mostra o menu de contexto
         try:
@@ -329,10 +331,10 @@ class Application(tk.Tk):
         finally:
             self.context_menu.grab_release()
 
-    def copy_to_clipboard(self, event):
+    def copy_to_clipboard(self):
         # Obtém a linha e coluna selecionada
-        row_id = self.analysis_results_tree.identify_row(event.y)
-        column_id = self.analysis_results_tree.identify_column(event.x)
+        row_id = self.selected_row
+        column_id = self.selected_col
 
         # Obtém o valor da célula
         cell_value = self.analysis_results_tree.set(row_id, column_id)
@@ -360,8 +362,20 @@ class Application(tk.Tk):
         threading.Timer(2, close_dialog).start()
 
     def translate_to_english(self):
-        # Implemente a funcionalidade de traduzir para inglês aqui
-        pass
+        # Verifica se uma linha está selecionada
+        selected_items = self.analysis_results_tree.selection()
+        if not selected_items:
+            tk.messagebox.showinfo("Aviso", "Por favor, selecione uma linha para traduzir.")
+            return
+
+        # Obtém a linha selecionada
+        selected_item = selected_items[0]
+
+        # Obtém o valor da célula na coluna "Valor"
+        cell_value = self.analysis_results_tree.set(selected_item, '#3')
+
+        # Mostra o valor em um alerta
+        tk.messagebox.showinfo("Tradução para inglês", f"Valor da chave: {cell_value}")
 
     def translate_to_spanish(self):
         # Implemente a funcionalidade de traduzir para espanhol aqui
