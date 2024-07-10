@@ -5,6 +5,7 @@ import pandas as pd
 import os
 import shutil
 import threading
+from translate import Translator
 
 class Application(tk.Tk):
     def __init__(self):
@@ -361,6 +362,18 @@ class Application(tk.Tk):
 
         threading.Timer(2, close_dialog).start()
 
+    @staticmethod
+    def to_english(text):
+        translator = Translator(from_lang="pt", to_lang="en")
+        translation = translator.translate(text)
+        return translation
+
+    @staticmethod
+    def to_spanish(text):
+        translator = Translator(from_lang="pt", to_lang="es")
+        translation = translator.translate(text)
+        return translation
+
     def translate_to_english(self):
         # Verifica se uma linha está selecionada
         selected_items = self.analysis_results_tree.selection()
@@ -374,12 +387,30 @@ class Application(tk.Tk):
         # Obtém o valor da célula na coluna "Valor"
         cell_value = self.analysis_results_tree.set(selected_item, '#3')
 
+        # Traduz o valor para o inglês
+        translated_value = self.to_english(cell_value)
+
         # Mostra o valor em um alerta
-        tk.messagebox.showinfo("Tradução para inglês", f"Valor da chave: {cell_value}")
+        tk.messagebox.showinfo("Tradução para inglês", f"Valor da chave: {translated_value}")
 
     def translate_to_spanish(self):
-        # Implemente a funcionalidade de traduzir para espanhol aqui
-        pass
+        # Verifica se uma linha está selecionada
+        selected_items = self.analysis_results_tree.selection()
+        if not selected_items:
+            tk.messagebox.showinfo("Aviso", "Por favor, selecione uma linha para traduzir.")
+            return
+
+        # Obtém a linha selecionada
+        selected_item = selected_items[0]
+
+        # Obtém o valor da célula na coluna "Valor"
+        cell_value = self.analysis_results_tree.set(selected_item, '#3')
+
+        # Traduz o valor para o espanhol
+        translated_value = self.to_spanish(cell_value)
+
+        # Mostra o valor em um alerta
+        tk.messagebox.showinfo("Tradução para espanhol", f"Valor da chave: {translated_value}")
 
 if __name__ == "__main__":
     app = Application()
