@@ -13,8 +13,12 @@ class Application(tk.Tk):
         self.title("Ajudante de Tradução")
         self.base_file_path = None
         self.trans_file_paths = []
+        self.trans_file_langs = {}
         self.columns = ['ID', 'Chave', 'Valor']
         self.analysis_results_tree = None
+
+        self.create_menu()
+
         # Frame para seleção de arquivos base
         self.base_file_frame = tk.Frame(self)
         self.base_file_frame.pack(fill='x')
@@ -72,6 +76,20 @@ class Application(tk.Tk):
         self.bind("<Button-3>", self.show_context_menu)
         # Maximizar a janela
         self.state('zoomed')
+
+    def create_menu(self):
+        # Cria uma nova barra de menu
+        menu_bar = tk.Menu(self)
+
+        # Cria um menu "Configurações" e adiciona alguns itens
+        settings_menu = tk.Menu(menu_bar, tearoff=0)
+        settings_menu.add_command(label="Definir idiomas",
+                                  command=self.set_trans_file_langs)  # Adiciona um item "Definir idiomas" ao menu "Configurações"
+        menu_bar.add_cascade(label="Configurações",
+                             menu=settings_menu)  # Adiciona o menu "Configurações" à barra de menu
+
+        # Configura a barra de menu da janela para ser a barra de menu que acabamos de criar
+        self.config(menu=menu_bar)
 
     def get_keys(self, dic, parent_key = ''):
         keys = []
@@ -162,6 +180,53 @@ class Application(tk.Tk):
                 trans_text.config(state='disabled')
                 line_count = content.count('\n') + 1
                 trans_text.insert(tk.END, f"\n\n--- Total de linhas: {line_count} ---")
+
+    def set_trans_file_langs(self):
+        # Cria uma nova janela
+        lang_window = tk.Toplevel(self)
+        lang_window.title("Configurações")
+
+        # Cria um Frame para o arquivo base
+        base_frame = tk.Frame(lang_window)
+        base_frame.pack(fill='x')
+
+        # Adiciona um Label para o nome do arquivo base
+        base_label = tk.Label(base_frame, text=self.base_file_path)
+        base_label.pack(side='left')
+
+        # Adiciona um OptionMenu para selecionar o idioma do arquivo base
+        base_var = tk.StringVar()
+        base_var.set(
+            self.trans_file_langs.get(self.base_file_path, ""))  # Define o valor inicial para o idioma atual, se houver
+        base_option_menu = tk.OptionMenu(base_frame, base_var, "pt", "en",
+                                         "es")  # Adicione mais opções conforme necessário
+        base_option_menu.pack(side='left')
+
+        # Salva a seleção sempre que ela é alterada
+        base_var.trace("w",
+                       lambda name, index, mode, p=self.base_file_path, v=base_var: self.save_trans_file_lang(p, v))
+
+        # Cria um Frame para cada arquivo de tradução
+        for i, path in enumerate(self.trans_file_paths):
+            frame = tk.Frame(lang_window)
+            frame.pack(fill='x')
+
+            # Adiciona um Label para o nome do arquivo
+            label = tk.Label(frame, text=path)
+            label.pack(side='left')
+
+            # Adiciona um OptionMenu para selecionar o idioma
+            var = tk.StringVar()
+            var.set(self.trans_file_langs.get(path, ""))  # Define o valor inicial para o idioma atual, se houver
+            option_menu = tk.OptionMenu(frame, var, "pt", "en", "es")  # Adicione mais opções conforme necessário
+            option_menu.pack(side='left')
+
+            # Salva a seleção sempre que ela é alterada
+            var.trace("w", lambda name, index, mode, p=path, v=var: self.save_trans_file_lang(p, v))
+
+    def save_trans_file_lang(self, path, var):
+        self.trans_file_langs[path] = var.get()
+        print(f"Idioma do arquivo {path} definido como {var.get()}")
 
     def analyze_files(self):
         only_missing = self.show_only_divergent.get()
@@ -268,41 +333,66 @@ class Application(tk.Tk):
     def analyze_missing(self):
         self.analyze_files(only_missing=True)
 
+    def add_key(self, dic, key_path, value):
+        keys = key_path.split('.')
+        for key in keys[:-1]:
+            if not isinstance(dic, dict):
+                dic = {}
+            if key not in dic or not isinstance(dic[key], dict):
+                dic[key] = {}
+            dic = dic[key]
+        if isinstance(dic, dict):
+            dic[keys[-1]] = value
+        else:
+            dic = {keys[-1]: value}
+
     def add_missing_key(self):
+        # Verifica se um arquivo base e pelo menos um arquivo de tradução foram selecionados
         if not self.base_file_path or not self.trans_file_paths:
-            print("Por favor, selecione o arquivo base e os arquivos de tradução antes de adicionar.")
+            tk.messagebox.showinfo("Aviso", "Por favor, selecione o arquivo base e pelo menos um arquivo de tradução.")
             return
 
-        # Itera sobre todas as linhas na tabela de resultados
-        for selected_item in self.analysis_results_tree.get_children():
-            values = self.analysis_results_tree.item(selected_item)['values']
-            key = values[1]
-            for path in self.trans_file_paths:
-                column_name = path.split('/')[-1]
-                if values[self.columns.index(column_name)] == 'OPS':
-                    # Cria um backup do arquivo antes de modificar
-                    backup_dir = 'temp'
-                    os.makedirs(backup_dir, exist_ok=True)  # Cria o diretório se ele não existir
-                    backup_path = os.path.join(backup_dir, 'backup_' + os.path.basename(path))
-                    shutil.copyfile(path, backup_path)
+        # Carrega o arquivo base
+        with open(self.base_file_path, 'r', encoding='utf-8') as f:
+            base_data = json.load(f)
 
-                    with open(path, 'r', encoding='utf-8') as f:
-                        data = json.load(f)
-                    keys = key.split('.')
-                    sub_data = data
-                    for k in keys[:-1]:
-                        if k not in sub_data:
-                            sub_data[k] = {}
-                        elif not isinstance(sub_data[k], dict):
-                            sub_data[k] = {}
-                        sub_data = sub_data[k]
-                    sub_data[keys[-1]] = "..." + "@@@"
+        # Itera sobre cada arquivo de tradução
+        for trans_file_path in self.trans_file_paths:
+            # Carrega o arquivo de tradução
+            with open(trans_file_path, 'r', encoding='utf-8') as f:
+                trans_data = json.load(f)
 
-                    with open(path, 'w', encoding='utf-8') as f:
-                        json.dump(data, f, ensure_ascii=False, indent=4)
+            # Obtém o idioma do arquivo de tradução
+            from_lang = self.trans_file_langs.get(trans_file_path,
+                                                  "pt")  # Use "pt" como padrão se nenhum idioma foi definido
 
-        # Atualiza a análise
-        self.analyze_missing()
+            # Itera sobre cada chave no arquivo base
+            for key in self.get_keys(base_data):
+                # Se a chave não está no arquivo de tradução, adiciona ela
+                if key not in self.get_keys(trans_data):
+                    # Obtém o valor da chave no arquivo base
+                    value = self.get_value(base_data, key)
+
+                    # Verifica se o valor é uma string
+                    if isinstance(value, str):
+                        # Traduz o valor para o idioma do arquivo de tradução
+                        translated_value = self.to_english(value, from_lang) if from_lang == "pt" else self.to_spanish(
+                            value, from_lang)
+                    elif isinstance(value, dict):
+                        # Se o valor for um dicionário, traduz cada valor no dicionário
+                        translated_value = {k: self.to_english(v, from_lang) if isinstance(v,
+                                                                                           str) and from_lang == "pt" else self.to_spanish(
+                            v, from_lang) if isinstance(v, str) else v for k, v in value.items()}
+                    else:
+                        # Se o valor não for uma string nem um dicionário, copia o valor sem traduzi-lo
+                        translated_value = value
+
+                    # Adiciona a chave e o valor traduzido ao arquivo de tradução
+                    self.add_key(trans_data, key, translated_value)
+
+            # Salva o arquivo de tradução
+            with open(trans_file_path, 'w', encoding='utf-8') as f:
+                json.dump(trans_data, f, ensure_ascii=False, indent=4)
 
     def create_context_menu(self):
         self.context_menu = tk.Menu(self, tearoff=0)
@@ -363,14 +453,14 @@ class Application(tk.Tk):
         threading.Timer(2, close_dialog).start()
 
     @staticmethod
-    def to_english(text):
-        translator = Translator(from_lang="pt", to_lang="en")
+    def to_english(text, from_lang):
+        translator = Translator(from_lang=from_lang, to_lang="en")
         translation = translator.translate(text)
         return translation
 
     @staticmethod
-    def to_spanish(text):
-        translator = Translator(from_lang="pt", to_lang="es")
+    def to_spanish(text, from_lang):
+        translator = Translator(from_lang=from_lang, to_lang="es")
         translation = translator.translate(text)
         return translation
 
@@ -381,6 +471,9 @@ class Application(tk.Tk):
             tk.messagebox.showinfo("Aviso", "Por favor, selecione uma linha para traduzir.")
             return
 
+        # Obtém o idioma do arquivo de tradução
+        from_lang = self.trans_file_langs.get(self.base_file_path, "pt")
+
         # Obtém a linha selecionada
         selected_item = selected_items[0]
 
@@ -388,7 +481,7 @@ class Application(tk.Tk):
         cell_value = self.analysis_results_tree.set(selected_item, '#3')
 
         # Traduz o valor para o inglês
-        translated_value = self.to_english(cell_value)
+        translated_value = self.to_english(cell_value, from_lang)
 
         # Mostra o valor em um alerta
         tk.messagebox.showinfo("Tradução para inglês", f"Valor da chave: {translated_value}")
@@ -400,6 +493,9 @@ class Application(tk.Tk):
             tk.messagebox.showinfo("Aviso", "Por favor, selecione uma linha para traduzir.")
             return
 
+        # Obtém o idioma do arquivo de tradução
+        from_lang = self.trans_file_langs.get(self.base_file_path, "pt")
+
         # Obtém a linha selecionada
         selected_item = selected_items[0]
 
@@ -407,7 +503,7 @@ class Application(tk.Tk):
         cell_value = self.analysis_results_tree.set(selected_item, '#3')
 
         # Traduz o valor para o espanhol
-        translated_value = self.to_spanish(cell_value)
+        translated_value = self.to_spanish(cell_value, from_lang)
 
         # Mostra o valor em um alerta
         tk.messagebox.showinfo("Tradução para espanhol", f"Valor da chave: {translated_value}")
