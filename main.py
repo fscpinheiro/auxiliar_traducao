@@ -523,12 +523,12 @@ class Application(tk.Tk):
                 stack.pop()
             elif ':' in stripped:
                 key = stripped.split(':')[0].strip().strip('"')
-                path = '.'.join(stack + [key])
+                path = '.'.join(stack + [key]).replace('{.', '')  # remove '{.' from all keys
                 if key in keys_seen_at_current_level:
                     if path in duplicates:
                         duplicates[path] += 1
                     else:
-                        duplicates[path] = 2
+                        duplicates[path] = 1
                 else:
                     keys_seen_at_current_level.add(key)
         return duplicates
@@ -564,9 +564,20 @@ class Application(tk.Tk):
 
             # Adiciona as duplicatas ao Treeview
             for duplicate, count in duplicates.items():
-                self.duplicates_results_tree.insert('', 'end', text=f"{duplicate} {count}x")
+                self.duplicates_results_tree.insert('', 'end', values=(duplicate, f"{count}x"))
         else:
             tk.messagebox.showinfo("Nenhuma duplicata encontrada", "Nenhuma chave ou nó duplicado foi encontrado.")
+
+        # Configura o Treeview para ter duas colunas
+        self.duplicates_results_tree['columns'] = ('Chave', 'Contagem')
+        self.duplicates_results_tree.column('#0', width=0, stretch='no')  # hide the first column
+        self.duplicates_results_tree.column('Chave', anchor='w')
+        self.duplicates_results_tree.column('Contagem', anchor='w')
+
+        # Define os cabeçalhos das colunas
+        self.duplicates_results_tree.heading('#0', text='', anchor='w')
+        self.duplicates_results_tree.heading('Chave', text='Chave', anchor='w')
+        self.duplicates_results_tree.heading('Contagem', text='Contagem', anchor='w')
 
 if __name__ == "__main__":
     app = Application()
