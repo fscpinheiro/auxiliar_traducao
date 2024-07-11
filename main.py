@@ -7,6 +7,8 @@ import shutil
 import threading
 from translate import Translator
 from googletrans import Translator
+from tkinter import simpledialog
+
 
 class Application(tk.Tk):
     def __init__(self):
@@ -83,6 +85,9 @@ class Application(tk.Tk):
         # Adiciona um novo Treeview para exibir os resultados
         self.duplicates_results_tree = ttk.Treeview(self.duplicates_tab)
         self.duplicates_results_tree.pack(expand=1, fill='both')
+        # Adiciona um botão para criar um novo arquivo de tradução
+        self.new_file_button = tk.Button(self.options_frame, text="Criar novo arquivo", command=self.create_new_file)
+        self.new_file_button.pack(side='left')
         # Maximizar a janela
         self.state('zoomed')
 
@@ -578,6 +583,85 @@ class Application(tk.Tk):
         self.duplicates_results_tree.heading('#0', text='', anchor='w')
         self.duplicates_results_tree.heading('Chave', text='Chave', anchor='w')
         self.duplicates_results_tree.heading('Contagem', text='Contagem', anchor='w')
+
+    def translate_dict(self, data, from_lang, to_lang):
+        translator = Translator()
+        if isinstance(data, dict):
+            return {k: self.translate_dict(v, from_lang, to_lang) for k, v in data.items()}
+        elif isinstance(data, str):
+            return translator.translate(data, src=from_lang, dest=to_lang).text
+        else:
+            return data
+
+    def create_new_file(self):
+        # Solicita ao usuário que selecione o arquivo base
+        tk.messagebox.showinfo("Aviso", "Por favor, selecione o arquivo base para traduzir.")
+        base_file_path = filedialog.askopenfilename()
+        if not base_file_path:
+            return
+
+        # Cria uma nova janela de diálogo
+        dialog = tk.Toplevel(self)
+        dialog.title("Criar novo arquivo")
+
+        # Solicita ao usuário que insira o idioma do arquivo base
+        tk.Label(dialog, text="Idioma do arquivo base:").pack()
+        base_file_lang = tk.StringVar(dialog)
+        base_file_lang.set('pt')  # define o valor padrão
+        base_file_lang_menu = tk.OptionMenu(dialog, base_file_lang, 'fr', 'it', 'ru', 'de', 'es', 'en', 'pt')
+        base_file_lang_menu.pack()
+
+        # Solicita ao usuário que insira o idioma do novo arquivo
+        tk.Label(dialog, text="Idioma do novo arquivo:").pack()
+        new_file_lang = tk.StringVar(dialog)
+        new_file_lang.set('en')  # define o valor padrão
+        new_file_lang_menu = tk.OptionMenu(dialog, new_file_lang, 'fr', 'it', 'ru', 'de', 'es', 'en', 'pt')
+        new_file_lang_menu.pack()
+
+        # Adiciona um botão para confirmar a seleção do idioma
+        confirm_button = tk.Button(dialog, text="Confirmar",
+                                   command=lambda: self.create_new_file_confirm(base_file_path, base_file_lang.get(),
+                                                                                new_file_lang.get()))
+        confirm_button.pack()
+
+    def create_new_file_confirm(self, base_file_path, base_file_lang, new_file_lang):
+        # Solicita ao usuário que insira o nome do novo arquivo
+        tk.messagebox.showinfo("Aviso", "Por favor, insira o nome do novo arquivo.")
+        new_file_path = filedialog.asksaveasfilename(defaultextension=".json")
+        if not new_file_path:
+            return
+
+        # Carrega o arquivo base
+        with open(base_file_path, 'r', encoding='utf-8') as f:
+            base_data = json.load(f)
+
+        # Cria o novo arquivo com as traduções
+        new_data = self.translate_dict(base_data, base_file_lang, new_file_lang)
+        with open(new_file_path, 'w', encoding='utf-8') as f:
+            json.dump(new_data, f, ensure_ascii=False, indent=4)
+
+        tk.messagebox.showinfo("Informação", "O novo arquivo de tradução foi criado com sucesso.")
+
+        # Abre o arquivo base e o novo arquivo de tradução na guia Arquivos
+        self.open_file_in_new_tab(base_file_path)
+        self.open_file_in_new_tab(new_file_path)
+
+    def open_file_in_new_tab(self, file_path):
+        # Cria uma nova aba para o arquivo
+        file_tab = ttk.Frame(self.view_notebook)
+        self.view_notebook.add(file_tab, text=os.path.basename(file_path))
+
+        # Cria um novo Treeview na aba
+        file_tree = ttk.Treeview(file_tab)
+        file_tree.pack(expand=True, fill='both')
+
+        # Carrega o arquivo
+        with open(file_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+
+        # Adiciona os dados do arquivo ao Treeview
+        for key, value in data.items():
+            file_tree.insert('', 'end', text=f"{key}: {value}")
 
 if __name__ == "__main__":
     app = Application()
